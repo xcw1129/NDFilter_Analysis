@@ -6,6 +6,7 @@ import numpy as np
 from numpy import random  # 随机数库
 
 Pi = np.pi
+FLOAT_EPS = np.finfo(float)  # 浮点数精度
 
 # 绘图库
 from matplotlib import pyplot as plt
