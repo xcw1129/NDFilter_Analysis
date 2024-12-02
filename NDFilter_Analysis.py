@@ -20,6 +20,7 @@ class NDfilter_Analysis(Analysis):
     def __init__(
         self,
         Sig: Signal,
+        CvgError: float = 0.2,
         plot: bool = False,
         plot_save: bool = False,
         **kwargs,
@@ -27,6 +28,7 @@ class NDfilter_Analysis(Analysis):
         super().__init__(Sig=Sig, plot=plot, plot_save=plot_save, **kwargs)
         # 该分析类的特有参数
         # ------------------------------------------------------------------------------------#
+        self.CvgError = CvgError  # 收敛误差: 误差使用L2范数
 
     # ----------------------------------------------------------------------------------------#
     @Analysis.Plot("1D", plot_spectrum)
@@ -63,7 +65,7 @@ class NDfilter_Analysis(Analysis):
                 data[i] = (y[i] - (-dt) * data[i + 1]) / u[i]
             # 收敛判断
             ErrorNorm = np.linalg.norm(data - _data)
-            if ErrorNorm < 0.2:
+            if ErrorNorm < self.CvgError:
                 break
         return self.Sig.t_Axis, data
 
@@ -103,8 +105,8 @@ class NDfilter_Analysis(Analysis):
             Delta = Coe * D2_data * dt  # 单步增量
             filted_data += Delta  # 迭代
             # 收敛判断
-            L = np.linalg.norm(Delta - _Delta)
-            if L < 0.2:
+            ErrorNorm = np.linalg.norm(Delta - _Delta)
+            if ErrorNorm < self.CvgError:
                 break
             _Delta = Delta.copy()
 
