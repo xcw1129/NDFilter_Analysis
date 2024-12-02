@@ -67,6 +67,72 @@ class NDfilter_Analysis(Analysis):
                 break
         return self.Sig.t_Axis, data
 
+        # ----------------------------------------------------------------------------------------#
+
+    @Analysis.Plot("1D", plot_spectrum)
+    @Analysis.Input({"dt": {"CloseHigh": 0.5, "CloseLow": 0.01}})
+    def LDF_debug(self, dt: float):
+        # 初始化
+        filted_data = self.Sig.data.copy()
+        N = self.Sig.N
+        # 边界条件处理
+        left = np.mean(filted_data[:100])
+        right = np.mean(filted_data[-100:])
+        # debug输出
+        filted_data_process = []
+        # ------------------------------------------------------------------------------------#
+        # 隐式差分-τU_(i-1,j)+(1+2τ)U_(i,j)-τU_(i+1,j)=U_(i,j-1), 边界条件U_(0,j)=U_(N-1,j)=原始信号边界估计
+        for k in range(100):
+            filted_data[0] = left
+            filted_data[-1] = right
+            _data = filted_data.copy()  # 保持单次迭代前的数据
+            # --------------------------------------------------------------------------------#
+            # 追赶法求解原差分等价三对角线性方程组: A*U_(i,j+1)=U_(i,j)
+            l = np.zeros(N)
+            u = np.zeros(N)
+            # 求解L*y=U_(i,j)得y
+            y = np.zeros(N)
+            u[0] = 1
+            y[0] = filted_data[0]
+            for i in range(1, N):
+                l[i] = -dt / u[i - 1]
+                u[i] = 1 + 2 * dt - l[i] * (-dt)
+                y[i] = filted_data[i] - l[i] * y[i - 1]
+            # 求解U*U_(i,j+1)=y得U_(i,j+1)
+            filted_data[-1] = y[-1] / u[-1]
+            for i in range(N - 2, -1, -1):
+                filted_data[i] = (y[i] - (-dt) * filted_data[i + 1]) / u[i]
+            # --------------------------------------------------------------------------------#
+            # 收敛判断
+            ErrorNorm = np.linalg.norm(filted_data - _data)
+            if ErrorNorm < self.CvgError:
+                # debug输出
+                print(
+                    f"第{k+1}次迭代增量收敛范数: {np.round(ErrorNorm, 4)}<{self.CvgError}"
+                )
+                break
+            # --------------------------------------------------------------------------------#
+            # debug输出
+            filted_data_process.append(filted_data.copy())
+            if k % 5 == 0:
+                print(f"第{k+1}次迭代增量收敛范数: {np.round(ErrorNorm, 4)}")
+        # ------------------------------------------------------------------------------------#
+        # debug输出
+        filted_data_process = np.array(filted_data_process)
+        framelabel = [f"第{i+1}次迭代" for i in range(filted_data_process.shape[0])]
+        plot_2D_Anim(
+            self.Sig.t_Axis,
+            filted_data_process,
+            xlabel="时间t(s)",
+            ylabel="信号幅值",
+            title="线性扩散滤波过程",
+            framelabel=framelabel,
+        )
+        self.plot = True
+        print("迭代完成, 扩散过程动画已保存")
+        # ------------------------------------------------------------------------------------#
+        return self.Sig.t_Axis, filted_data
+
     # ----------------------------------------------------------------------------------------#
     @Analysis.Plot("1D", plot_spectrum)
     @Analysis.Input(
