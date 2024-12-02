@@ -153,6 +153,8 @@ class NDfilter_Analysis(Analysis):
         # 计算扩散迭代过程的局部阈值
         _, thre = self.PowerFlow(G_win, SmoothThre)
         thre *= kappa
+        # ------------------------------------------------------------------------------------#
+        # 迭代求解非线性扩散方程
         for i in range(100):
             # 计算扩散控制特征, 该特征决定扩散方向
             DiffFea = np.convolve(np.square(filted_data), G_win, "same")
@@ -182,7 +184,7 @@ class NDfilter_Analysis(Analysis):
             "dt": {"CloseHigh": 0.5, "CloseLow": 0.01},
         }
     )
-    def debug_SA_NDF(self, WinSize: float, SmoothThre: int, kappa: float, dt: float):
+    def SA_NDF_debug(self, WinSize: float, SmoothThre: int, kappa: float, dt: float):
         # 初始化
         data = self.Sig.data
         fs = self.Sig.fs
@@ -208,10 +210,20 @@ class NDfilter_Analysis(Analysis):
             D2_filted_data = self.Div2(filted_data)  # 信号二阶导
             Delta = Coe * D2_filted_data * dt  # 单步增量
             filted_data += Delta  # 迭代
+            # 收敛判断
+            ErrorNorm = np.linalg.norm(Delta - _Delta)
+            if ErrorNorm < self.CvgError:
+                # debug输出
+                print(
+                    f"第{i+1}次迭代增量收敛范数: {np.round(ErrorNorm, 4)}<{self.CvgError}"
+                )
+                break
+            _Delta = Delta.copy()
             # --------------------------------------------------------------------------------#
             # debug输出
             filted_data_process.append(filted_data.copy())
             if i % 5 == 0:
+                print(f"第{i+1}次迭代增量收敛范数: {np.round(ErrorNorm, 4)}")
                 NDfilter_Analysis.plot_2lines(
                     t_Axis,
                     DiffFea,
@@ -219,15 +231,6 @@ class NDfilter_Analysis(Analysis):
                     title=f"第{i+1}次扩散迭代的特征控制情况",
                     legend=("控制特征", "局部阈值"),
                 )
-            # --------------------------------------------------------------------------------#
-            # 收敛判断
-            ErrorNorm = np.linalg.norm(Delta - _Delta)
-            if ErrorNorm < self.CvgError:
-                break
-            else:
-                # debug输出
-                print(f"第{i+1}次迭代增量收敛范数: {np.round(ErrorNorm, 4)}")
-            _Delta = Delta.copy()
         # ------------------------------------------------------------------------------------#
         # debug输出
         filted_data_process = np.array(filted_data_process)
