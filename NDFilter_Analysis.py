@@ -32,9 +32,7 @@ class NDfilter_Analysis(Analysis):
 
     # ----------------------------------------------------------------------------------------#
     @Analysis.Plot("1D", plot_spectrum)
-    @Analysis.Input(
-        {"dt": {"CloseHigh": 0.5, "CloseLow": 0.01}, "iters": {"High": 200, "Low": 10}}
-    )
+    @Analysis.Input({"dt": {"CloseHigh": 0.5, "CloseLow": 0.01}})
     def LDF(self, dt: float, iters: int):
         # 初始化
         data = self.Sig.data.copy()
@@ -74,7 +72,7 @@ class NDfilter_Analysis(Analysis):
     @Analysis.Input(
         {
             "WinSize": {"CloseHigh": 0.5, "CloseLow": 0.01},
-            "SmoothThre:int": {"High": 200, "Low": 10},
+            "SmoothThre": {"High": 200, "Low": 10},
             "kappa": {"CloseHigh": 5, "CloseLow": 1},
             "dt": {"CloseHigh": 0.5, "CloseLow": 0.01},
         }
@@ -113,7 +111,7 @@ class NDfilter_Analysis(Analysis):
     @Analysis.Input(
         {
             "WinSize": {"CloseHigh": 0.5, "CloseLow": 0.01},
-            "SmoothThre:int": {"High": 200, "Low": 10},
+            "SmoothThre": {"High": 200, "Low": 10},
             "kappa": {"CloseHigh": 5, "CloseLow": 1},
             "dt": {"CloseHigh": 0.5, "CloseLow": 0.01},
         }
