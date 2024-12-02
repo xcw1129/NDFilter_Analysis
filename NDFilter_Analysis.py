@@ -89,16 +89,13 @@ class NDfilter_Analysis(Analysis):
         # 计算扩散迭代过程的局部阈值
         _, thre = self.PowerFlow(G_win, SmoothThre)
         thre *= kappa
-        for i in range(iters):
+        for i in range(100):
             # 计算扩散控制特征, 该特征决定扩散方向
             DiffFea = np.convolve(np.square(filted_data), G_win, "same")
             # 代入特征到扩散控制函数，得到缩放后的扩散系数
-            Coe = NDfilter_Analysis.DiffusionScaler(DiffFea, thre)
-            if i % 10 == 0:
-                NDfilter_Analysis.plot_2lines(
-                    self.Sig.t_Axis, DiffFea, thre, title=f"第{i+1}次迭代特征缩放情况"
-                )
-                plot_spectrum(self.Sig.t_Axis, Coe, title=f"第{i+1}次迭代扩散系数")
+            Coe = NDfilter_Analysis.DiffusionScaler(
+                DiffFea, thre
+            )  # thre为数组, 即局部阈值
             # 扩散方程增量式迭代
             D2_filted_data = self.Div2(filted_data)  # 信号二阶导
             Delta = Coe * D2_filted_data * dt  # 单步增量
@@ -109,7 +106,6 @@ class NDfilter_Analysis(Analysis):
                 break
             _Delta = Delta.copy()
 
-        print(f"迭代次数:{i+1}")
         return self.Sig.t_Axis, filted_data
 
     # ----------------------------------------------------------------------------------------#
@@ -270,6 +266,9 @@ class NDfilter_Analysis(Analysis):
         # 设置标题
         title = kwargs.get("title", None)
         plt.title(title, fontproperties=zh_font)
+        # 设置图例
+        legend = kwargs.get("legend", ["data1", "data2"])
+        plt.legend(legend, loc="upper right", prop=zh_font)
         # 设置图像栅格
         plt.grid(axis="y", linestyle="--", linewidth=0.8, color="grey", dashes=(5, 10))
         # ---------------------------------------------------------------------------------------#
