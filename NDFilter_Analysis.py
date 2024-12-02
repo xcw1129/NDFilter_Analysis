@@ -1,7 +1,7 @@
 import numpy as np
 
 from PySP.Signal import Signal, Analysis
-from PySP.Plot import plot_spectrum
+from PySP.Plot import plot_spectrum, plot_2D_Anim
 
 import matplotlib.pyplot as plt
 from matplotlib import font_manager
@@ -112,10 +112,82 @@ class NDfilter_Analysis(Analysis):
         return self.Sig.t_Axis, filted_data
 
     # ----------------------------------------------------------------------------------------#
-    def PowerFlow(self, size: float, n: int):
+    @Analysis.Plot("1D", plot_spectrum)
+    @Analysis.Input(
+        {
+            "WinSize": {"CloseHigh": 0.5, "CloseLow": 0.01},
+            "SmoothThre:int": {"High": 200, "Low": 10},
+            "kappa": {"CloseHigh": 5, "CloseLow": 1},
+            "dt": {"CloseHigh": 0.5, "CloseLow": 0.01},
+        }
+    )
+    def debug_SA_NDF(self, WinSize: float, SmoothThre: int, kappa: float, dt: float):
         # 初始化
         data = self.Sig.data
         fs = self.Sig.fs
+        t_Axis = self.Sig.t_Axis
+        filted_data = data.copy()  # 迭代过程中的滤波信号
+        Delta = _Delta = np.zeros_like(data)
+        G_win = NDfilter_Analysis.Gaussian(WinSize, int(WinSize * fs))
+        # 计算扩散迭代过程的局部阈值
+        _, thre = self.PowerFlow(G_win, SmoothThre)
+        thre *= kappa
+        # debug输出
+        filted_data_process = []
+        # ------------------------------------------------------------------------------------#
+        # 迭代求解非线性扩散方程
+        for i in range(100):
+            # 计算扩散控制特征, 该特征决定扩散方向
+            DiffFea = np.convolve(np.square(filted_data), G_win, "same")
+            # 代入特征到扩散控制函数，得到缩放后的扩散系数
+            Coe = NDfilter_Analysis.DiffusionScaler(
+                DiffFea, thre
+            )  # thre为数组, 即局部阈值
+            # 扩散方程增量式迭代
+            D2_filted_data = self.Div2(filted_data)  # 信号二阶导
+            Delta = Coe * D2_filted_data * dt  # 单步增量
+            filted_data += Delta  # 迭代
+            # --------------------------------------------------------------------------------#
+            # debug输出
+            filted_data_process.append(filted_data.copy())
+            if i % 5 == 0:
+                NDfilter_Analysis.plot_2lines(
+                    t_Axis,
+                    DiffFea,
+                    thre,
+                    title=f"第{i+1}次扩散迭代的特征控制情况",
+                    legend=("控制特征", "局部阈值"),
+                )
+            # --------------------------------------------------------------------------------#
+            # 收敛判断
+            ErrorNorm = np.linalg.norm(Delta - _Delta)
+            if ErrorNorm < self.CvgError:
+                break
+            else:
+                # debug输出
+                print(f"第{i+1}次迭代增量收敛范数: {np.round(ErrorNorm, 4)}")
+            _Delta = Delta.copy()
+        # ------------------------------------------------------------------------------------#
+        # debug输出
+        filted_data_process = np.array(filted_data_process)
+        framelabel = [f"第{i+1}次迭代" for i in range(filted_data_process.shape[0])]
+        plot_2D_Anim(
+            t_Axis,
+            filted_data_process,
+            xlabel="时间t(s)",
+            ylabel="信号幅值",
+            title="非线性扩散滤波过程",
+            framelabel=framelabel,
+        )
+        self.plot = True
+        print("迭代完成, 扩散过程动画已保存")
+        # ------------------------------------------------------------------------------------#
+        return self.Sig.t_Axis, filted_data
+
+    # ----------------------------------------------------------------------------------------#
+    def PowerFlow(self, window: np.ndarray, n: int):
+        # 初始化
+        data = self.Sig.data
         # 计算功率流
         G_win = NDfilter_Analysis.Gaussian(size, int(size * fs))
         power = np.convolve(np.square(data), G_win, mode="same")  # 窗卷积计算功率流
