@@ -74,13 +74,12 @@ class NDfilter_Analysis(Analysis):
     @Analysis.Input(
         {
             "WinSize": {"CloseHigh": 0.5, "CloseLow": 0.01},
-            "SegNum": {"High": 200, "Low": 10},
-            "kappa": {"CloseHigh": 0.5, "CloseLow": 0.01},
-            "iters": {"High": 200, "Low": 10},
+            "SmoothThre:int": {"High": 200, "Low": 10},
+            "kappa": {"CloseHigh": 5, "CloseLow": 1},
             "dt": {"CloseHigh": 0.5, "CloseLow": 0.01},
         }
     )
-    def SA_NDF(self, WinSize: float, SegNum, kappa: float, iters: int, dt: float):
+    def SA_NDF(self, WinSize: float, SmoothThre: int, kappa: float, dt: float):
         # 初始化
         data = self.Sig.data
         fs = self.Sig.fs
@@ -88,7 +87,7 @@ class NDfilter_Analysis(Analysis):
         Delta = _Delta = np.zeros_like(data)
         G_win = NDfilter_Analysis.Gaussian(WinSize, int(WinSize * fs))
         # 计算扩散迭代过程的局部阈值
-        _, thre = self.PowerFlow(WinSize * 10, SegNum)
+        _, thre = self.PowerFlow(G_win, SmoothThre)
         thre *= kappa
         for i in range(iters):
             # 计算扩散控制特征, 该特征决定扩散方向
@@ -101,8 +100,8 @@ class NDfilter_Analysis(Analysis):
                 )
                 plot_spectrum(self.Sig.t_Axis, Coe, title=f"第{i+1}次迭代扩散系数")
             # 扩散方程增量式迭代
-            D2_data = self.Div2(filted_data)  # 信号二阶导
-            Delta = Coe * D2_data * dt  # 单步增量
+            D2_filted_data = self.Div2(filted_data)  # 信号二阶导
+            Delta = Coe * D2_filted_data * dt  # 单步增量
             filted_data += Delta  # 迭代
             # 收敛判断
             ErrorNorm = np.linalg.norm(Delta - _Delta)
@@ -191,17 +190,12 @@ class NDfilter_Analysis(Analysis):
         # 初始化
         data = self.Sig.data
         # 计算功率流
-        G_win = NDfilter_Analysis.Gaussian(size, int(size * fs))
-        power = np.convolve(np.square(data), G_win, mode="same")  # 窗卷积计算功率流
-        # 功率流分段平均化
-        segstart_idx = np.linspace(0, len(power), n + 1, dtype=int)[:-1]  # 分段起始索引
-        segend_idx = np.linspace(0, len(power), n + 1, dtype=int)[1:]  # 分段结束索引
-        segmean_power = np.zeros_like(power)
-        for i in range(n):
-            power_seg = power[segstart_idx[i] : segend_idx[i]]
-            segmean_power[segstart_idx[i] : segend_idx[i]] = np.mean(
-                power_seg, keepdims=True
-            )
+        power = np.convolve(np.square(data), window, mode="same")  # 窗卷积计算功率流
+        # 邻域平均化, 使统计特征计算更迟钝
+        segmean_power = np.convolve(power, np.ones(n) / n, mode="same")
+        # 边界处理
+        segmean_power[:n] = segmean_power[n]
+        segmean_power[-n:] = segmean_power[-n]
         return self.Sig.t_Axis, segmean_power
 
     # ----------------------------------------------------------------------------------------#
@@ -222,7 +216,7 @@ class NDfilter_Analysis(Analysis):
             t_Axis = np.linspace(-T / 2, T / 2, N, endpoint=False)
         else:
             t_Axis = np.linspace(-T / 2, T / 2, N, endpoint=True)
-        sigma = (t_Axis[-1] - t_Axis[0]) / 2
+        sigma = T / 2
         window = np.exp(-(t_Axis**2) / (2 * sigma**2))
         window /= np.sum(window)  # 归一化
         return window
